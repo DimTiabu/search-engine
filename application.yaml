@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+user-settings:
+  user-agent: Chrome/120.0.0.0
+  referrer: http://www.google.com
+
+spring:
+  datasource:
+    username: root
+    password: testtest
+    url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+indexing-settings:
+  sites:
+#    - url: https://volochek.life/
+#      name: volochek.life
+    - url: https://www.playback.ru
+      name: PlayBack.Ru
+    - url: https://ipfran.ru
+      name: Ipfran.Ru
