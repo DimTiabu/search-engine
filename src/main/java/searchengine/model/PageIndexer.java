@@ -51,14 +51,6 @@ public class PageIndexer extends RecursiveTask<Void> {
                 if (!url.equals(path) &&
                         url.contains(path) &&
                         !url.contains("#") &&
-//             TODO  Следующую строку нужно удалить, чтобы выдавал все страницы
-//                        !url.contains("html") &&
-//                        !url.contains("institute") &&
-//                        !url.contains("scie") &&
-//                        !url.contains("train") &&
-//                        !url.contains("identit") &&
-//                        !url.contains("seminars") &&
-//                        !url.contains("publi") &&
                         page == null) {
                     PageIndexer task = new PageIndexer(site, url,
                             siteRepository, pageRepository,
@@ -119,7 +111,6 @@ public class PageIndexer extends RecursiveTask<Void> {
             synchronized (pageRepository) {
                 if (pageRepository.findByPath(path) == null) {
                     pageRepository.save(page);
-                    System.out.println("Создание страницы " + path);
                     return page;
                 }
             }

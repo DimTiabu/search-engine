@@ -16,12 +16,12 @@ spring:
         dialect: org.hibernate.dialect.MySQL8Dialect
     hibernate:
       ddl-auto: validate
-    show-sql: false
+    show-sql: true
 
 indexing-settings:
   sites:
-#    - url: https://volochek.life/
-#      name: volochek.life
+    - url: https://volochek.life/
+      name: volochek.life
     - url: https://www.playback.ru
       name: PlayBack.Ru
     - url: https://ipfran.ru

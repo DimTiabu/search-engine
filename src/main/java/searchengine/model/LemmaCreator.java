@@ -14,7 +14,7 @@ public class LemmaCreator {
         try {
             LuceneMorphology luceneMorph = new RussianLuceneMorphology();
 
-            String[] words = takeWordsFromText(text, luceneMorph);
+            String[] words = takeWordsFromText(text);
 
             String regex1 = "СОЮЗ";
             String regex2 = "ПРЕДЛ";
@@ -45,8 +45,7 @@ public class LemmaCreator {
         return lemmas;
     }
 
-    public String[] takeWordsFromText(String text,
-                                      LuceneMorphology luceneMorph) {
+    public String[] takeWordsFromText(String text) {
         text = text.toLowerCase();
 
         String regex = "[^а-я]";

@@ -352,8 +352,8 @@ public class IndexingServiceImpl implements IndexingService {
             String regex = "[^а-я]";
             boolean firstWordIsAppend = false;
 
-            for (int i = 0; i < newWords.length; i++) {
-                String word = newWords[i];
+            for (String newWord : newWords) {
+                String word = newWord;
                 String changedWord = word.toLowerCase().replaceAll(regex, "");
 
                 if (changedWord.isEmpty()) continue;

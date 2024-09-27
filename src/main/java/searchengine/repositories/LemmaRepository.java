@@ -13,7 +13,6 @@ import java.util.List;
 
 @Repository
 public interface LemmaRepository extends JpaRepository<LemmaEntity, Integer> {
-    LemmaEntity findByLemma(String lemma);
 
     @Query("SELECT l FROM LemmaEntity l WHERE l.lemma = :lemma AND l.site = :site")
     LemmaEntity findByLemmaAndSiteId(@Param("lemma") String lemma, @Param("site") SiteEntity site);
