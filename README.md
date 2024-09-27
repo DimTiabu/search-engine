@@ -31,22 +31,60 @@
 1. *Клонирование репозитория:*
 
 sh
+
+```
 git clone https://github.com/DimTiabu/searchEngine.git
+```
+
+2. *Установка списка сайтов для индексации в файле [application.yaml](application.yaml).* Например:
+
+```
+indexing-settings:
+sites:
+- url: https://volochek.life/
+name: volochek.life
+- url: https://www.playback.ru
+name: PlayBack.Ru
+- url: https://ipfran.ru
+name: Ipfran.Ru
+```
+
+3. *Установка логина и пароля для доступа к БД в файле [application.yaml](application.yaml).* Например:
+  ```
+spring:
+    datasource:
+    username: root
+    password: testtest
+```
+4. *Переход в директорию репозитория:*
+
+sh
+
+```
 cd searchEngine
+```
 
-2. *Сборка проекта:*
+5. *Сборка проекта:*
 
 sh
+
+```
 mvn clean install
+```
 
-3. *Запуск приложения:*
+6. *Запуск приложения:*
 
 sh
+
+```
 mvn spring-boot:run
+```
 
-4. *Создание БД search_engine_db (если она еще не существует) в MySQL:*
+### Создание базы данных для работы с приложением в MySQL:
 
-5. Выполните в MySQL следующие команды:
+1. *Создание БД search_engine_db (если она еще не существует) в MySQL:*
+
+2. *Создание таблиц для работы с сущностями:*
 
 ```
 -- Таблица для сущности SiteEntity
@@ -89,18 +127,7 @@ FOREIGN KEY (page_id) REFERENCES page(id) ON DELETE CASCADE,
 FOREIGN KEY (lemma_id) REFERENCES lemma(id) ON DELETE CASCADE
 );
 ```
-6. В файле [application.yaml](application.yaml) пропишите список сайтов для индексации, например:
 
-```
-indexing-settings:
-sites:
-- url: https://volochek.life/
-name: volochek.life
-- url: https://www.playback.ru
-name: PlayBack.Ru
-- url: https://ipfran.ru
-name: Ipfran.Ru
-```
 ### Использование API
 
 Приложение предоставляет REST API для взаимодействия
@@ -112,19 +139,19 @@ name: Ipfran.Ru
 ![img.png](src/main/resources/app_screen.png)
 
 1. **Вкладка DASHBOARD:** 
-   * Предоставляет информацию об индексированных сайтах, страницах и леммах
+   * Предоставление информации об индексированных сайтах, страницах и леммах
 
 
 2. **Вкладка MANAGEMENT:** 
-   * Запускает полную индексацию сайтов, 
+   * Запуск полной индексации сайтов, 
 указанных в файле [application.yaml](application.yaml) 
-   * Запускает индексацию конкретной страницы
-   * Останавливает запущенную индексацию
+   * Запуск индексации конкретной страницы
+   * Остановка запущенной индексации
 
 
 3. **Вкладка SEARCH**
-   * Запускает поиск страниц по поисковому запросу по всем индексированным сайтам
-   * Запускает поиск страниц по поисковому запросу по конкретному сайту
+   * Посик страниц по поисковому запросу по всем индексированным сайтам
+   * Поиск страниц по поисковому запросу по конкретному сайту
      
 
 ---
