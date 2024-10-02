@@ -80,53 +80,8 @@ sh
 mvn spring-boot:run
 ```
 
-### Создание базы данных для работы с приложением в MySQL:
+7. *Создание БД search_engine_db (если она еще не существует) в MySQL:*
 
-1. *Создание БД search_engine_db (если она еще не существует) в MySQL:*
-
-2. *Создание таблиц для работы с сущностями:*
-
-```
--- Таблица для сущности SiteEntity
-CREATE TABLE site (
-id INT AUTO_INCREMENT PRIMARY KEY,
-status ENUM('INDEXING', 'INDEXED', 'FAILED') NOT NULL,
-status_time TIMESTAMP NOT NULL,
-last_error TEXT,
-url VARCHAR(255) NOT NULL,
-name VARCHAR(255) NOT NULL
-);
-
--- Таблица для сущности PageEntity
-CREATE TABLE page (
-id INT AUTO_INCREMENT PRIMARY KEY,
-site_id INT NOT NULL,
-path TEXT NOT NULL,
-code INT NOT NULL,
-content MEDIUMTEXT NOT NULL,
-INDEX idx_page_path (path(50)),
-FOREIGN KEY (site_id) REFERENCES site(id) ON DELETE CASCADE
-);
-
--- Таблица для сущности LemmaEntity
-CREATE TABLE lemma (
-id INT AUTO_INCREMENT PRIMARY KEY,
-site_id INT NOT NULL,
-lemma VARCHAR(255) NOT NULL,
-frequency INT NOT NULL,
-FOREIGN KEY (site_id) REFERENCES site(id) ON DELETE CASCADE
-);
-
--- Таблица для сущности IndexEntity
-CREATE TABLE `index` (
-id INT AUTO_INCREMENT PRIMARY KEY,
-page_id INT NOT NULL,
-lemma_id INT NOT NULL,
-`rank` FLOAT NOT NULL,
-FOREIGN KEY (page_id) REFERENCES page(id) ON DELETE CASCADE,
-FOREIGN KEY (lemma_id) REFERENCES lemma(id) ON DELETE CASCADE
-);
-```
 
 ### Использование API
 

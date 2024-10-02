@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.ToString;
 
 @Entity
-@Table(name = "page")
+@Table(name = "page", indexes = {@Index(name = "idx_page_path", columnList = "path")})
 @Data
 public class PageEntity {
     @Id
@@ -17,9 +17,7 @@ public class PageEntity {
     @JoinColumn(name = "site_id", nullable = false)
     private SiteEntity site;
 
-    @Column(name = "path", nullable = false,
-            columnDefinition = "TEXT, INDEX idx_page_path USING BTREE (path(50))")
-
+    @Column(name = "path", nullable = false, columnDefinition = "VARCHAR(255)")
     private String path;
 
     @Column(name = "code", nullable = false)
