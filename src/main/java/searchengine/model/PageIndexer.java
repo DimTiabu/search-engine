@@ -52,10 +52,8 @@ public class PageIndexer extends RecursiveTask<Void> {
                         url.contains(path) &&
                         !url.contains("#") &&
                         page == null) {
-                    PageIndexer task = new PageIndexer(site, url,
-                            siteRepository, pageRepository,
-                            lemmaRepository, indexRepository,
-                            userSettings, running);
+                    PageIndexer task = new PageIndexer(site, url, siteRepository, pageRepository,
+                            lemmaRepository, indexRepository, userSettings, running);
                     task.fork();
                     tasks.add(task);
                 }
@@ -124,11 +122,9 @@ public class PageIndexer extends RecursiveTask<Void> {
     @Transactional
     public void createLemmasAndIndices(PageEntity page) {
         try {
-            String pageContent = page.getContent();
             SiteEntity site = page.getSite();
             LemmaCreator lemmaCreator = new LemmaCreator();
-            Map<String, Integer> lemmas = lemmaCreator.getLemmas(pageContent);
-
+            Map<String, Integer> lemmas = lemmaCreator.getLemmas(page.getContent());
             List<IndexEntity> indicesToSave = new ArrayList<>();
 
             for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
@@ -145,24 +141,27 @@ public class PageIndexer extends RecursiveTask<Void> {
                     } else {
                         lemma.setFrequency(lemma.getFrequency() + 1);
                     }
-
-
                     lemmaRepository.save(lemma);
                 }
-                IndexEntity index;
-                index = indexRepository.findByLemmaIdAndPageId(lemma, page);
-                if (index == null) {
-                    index = new IndexEntity();
-                    index.setPage(page);
-                    index.setLemma(lemma);
-                    index.setRank(count);
-                    indicesToSave.add(index);
-                }
+                findOrCreateIndex(lemma, page, count, indicesToSave);
             }
             indexRepository.saveAll(indicesToSave);
 
         } catch (Exception e) {
             System.out.println("Ошибка createLemma: " + e.getMessage());
+        }
+    }
+
+    private void findOrCreateIndex(LemmaEntity lemma, PageEntity page,
+                                   float count, List<IndexEntity> indicesToSave) {
+        IndexEntity index;
+        index = indexRepository.findByLemmaIdAndPageId(lemma, page);
+        if (index == null) {
+            index = new IndexEntity();
+            index.setPage(page);
+            index.setLemma(lemma);
+            index.setRank(count);
+            indicesToSave.add(index);
         }
     }
 }

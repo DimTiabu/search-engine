@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.config.UserSettings;
+import searchengine.dto.indexing.SearchContext;
 import searchengine.model.LemmaCreator;
 import searchengine.dto.indexing.SearchResult;
 import searchengine.model.*;
@@ -37,6 +38,7 @@ public class IndexingServiceImpl implements IndexingService {
     private final IndexRepository indexRepository;
     private final AtomicBoolean indexingStarting = new AtomicBoolean(false);
     private final AtomicBoolean searchStarting = new AtomicBoolean(false);
+    private static final int SNIPPET_LENGTH = 200;
 
     @Autowired
     public IndexingServiceImpl(SitesList sites, UserSettings userSettings,
@@ -70,18 +72,11 @@ public class IndexingServiceImpl implements IndexingService {
                 SiteEntity siteEntity;
                 String url = site.getUrl();
                 synchronized (siteRepository) {
-                    siteEntity = siteRepository.findByUrl(url);
-                    if (siteEntity != null) {
-                        deleteSite(siteEntity);
-                    }
-                    siteEntity = createSiteEntity(site);
-                    siteEntityList.add(siteEntity);
+                    siteEntity = updateSite(site, url, siteEntityList);
                 }
                 forkJoinPool.submit(
-                        new PageIndexer(siteEntity, url,
-                                siteRepository, pageRepository,
-                                lemmaRepository, indexRepository,
-                                userSettings, indexingStarting));
+                        new PageIndexer(siteEntity, url, siteRepository, pageRepository,
+                                lemmaRepository, indexRepository, userSettings, indexingStarting));
             }
             forkJoinPool.shutdown();
             forkJoinPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
@@ -89,7 +84,6 @@ public class IndexingServiceImpl implements IndexingService {
             for (SiteEntity siteEntity : siteEntityList) {
                 if (indexingStarting.get()) synchronized (siteRepository) {
                     siteEntity.setStatus(SiteStatus.INDEXED);
-                    System.out.println(siteEntity.getName() + ": Установлен статус INDEXED");
                     siteRepository.save(siteEntity);
                 }
             }
@@ -100,18 +94,26 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
+    private SiteEntity updateSite(Site site, String url, List<SiteEntity> siteEntityList) {
+        SiteEntity siteEntity = siteRepository.findByUrl(url);
+        if (siteEntity != null) {
+            deleteSite(siteEntity);
+        }
+        siteEntity = createSiteEntity(site);
+        siteEntityList.add(siteEntity);
+        return siteEntity;
+    }
+
     @Transactional
     public synchronized void deleteSite(SiteEntity siteEntity) {
-        System.out.println("Попытка удаления сайта " + siteEntity.getUrl());
-        lemmaRepository.deleteBySite(siteEntity);
         List<PageEntity> pageEntityList
                 = pageRepository.findBySite(siteEntity);
         for (PageEntity page : pageEntityList) {
             indexRepository.deleteByPage(page);
         }
+        lemmaRepository.deleteBySite(siteEntity);
         pageRepository.deleteBySite(siteEntity.getId());
         siteRepository.deleteByUrl(siteEntity.getUrl());
-        System.out.println("Удален сайт " + siteEntity.getUrl());
     }
 
     @Transactional
@@ -186,10 +188,8 @@ public class IndexingServiceImpl implements IndexingService {
                 if (url.contains(siteUrl)) {
                     siteEntity = siteRepository.findByUrl(siteUrl);
                     if (siteEntity == null) siteEntity = createSiteEntity(site);
-                    PageIndexer pageIndexer = new PageIndexer(siteEntity, url,
-                            siteRepository, pageRepository,
-                            lemmaRepository, indexRepository,
-                            userSettings, indexingStarting);
+                    PageIndexer pageIndexer = new PageIndexer(siteEntity, url, siteRepository, pageRepository,
+                            lemmaRepository, indexRepository, userSettings, indexingStarting);
                     Document doc = pageIndexer.getDoc();
                     pageIndexer.createPageWithLemmasAndIndices(doc);
                 }
@@ -207,93 +207,127 @@ public class IndexingServiceImpl implements IndexingService {
     public Map<String, Object> search(String query, String site,
                                       int offset, int limit) {
         try {
-            if (searchStarting.get()) {
-                throw new Exception("Поиск уже запущен");
-            } else if (query.isEmpty()) {
-                throw new Exception("Задан пустой поисковый запрос");
-            }
+            validateSearch(query);
             searchStarting.set(true);
 
-            List<String> sitesList = new ArrayList<>();
-            if (site == null) {
-                sites.getSites().forEach(siteToSearch -> sitesList.add(siteToSearch.getUrl()));
-            } else {
-                sitesList.add(site);
-            }
+            List<String> sitesList = generateSitesList(site);
 
-            Set<PageEntity> combinedRelevantPages = new HashSet<>();
-            List<LemmaEntity> combinedFilteredLemmas = new ArrayList<>();
-            List<String> queryWords = new ArrayList<>();
-            Map<PageEntity, SiteEntity> pageToSiteMap = new HashMap<>();
+            SearchContext searchContext = initializeSearchContext(query, sitesList);
 
-            for (String siteUrl : sitesList) {
-                SiteEntity siteEntity = siteRepository.findByUrl(siteUrl);
-
-                List<LemmaEntity> filteredLemmas = getFilteredLemmas(query, siteEntity);
-                combinedFilteredLemmas.addAll(filteredLemmas);
-
-                Set<PageEntity> relevantPages = getRelevantPages(filteredLemmas, queryWords);
-
-                if (relevantPages != null) {
-                    combinedRelevantPages.addAll(relevantPages);
-                    relevantPages.forEach(page -> pageToSiteMap.put(page, siteEntity));
-                }
-            }
-
-            if (combinedFilteredLemmas.isEmpty())
+            if (searchContext.getCombinedFilteredLemmas().isEmpty())
                 throw new Exception("Не найдено подходящих лемм для данного запроса");
 
-            if (combinedRelevantPages.isEmpty()) {
+            if (searchContext.getCombinedRelevantPages().isEmpty()) {
                 return Collections.emptyMap();
             }
 
-            Map<PageEntity, Double> relevanceMap = new HashMap<>();
-            double maxRelevance = 0.0;
+            return prepareSearchResult(searchContext, offset, limit);
 
-            for (PageEntity page : combinedRelevantPages) {
-                double relevance;
-                if (page != null) {
-                    relevance = combinedFilteredLemmas.stream()
-                            .mapToDouble(lemma -> {
-                                IndexEntity indexEntity = indexRepository.findByLemmaIdAndPageId(lemma, page);
-                                return indexEntity != null ? indexEntity.getRank() : 0.0;
-                            })
-                            .sum();
-                    relevanceMap.put(page, relevance);
-                    if (relevance > maxRelevance) {
-                        maxRelevance = relevance;
-                    }
-                }
-
-            }
-            Double finalMaxRelevance = maxRelevance;
-
-            List<SearchResult> results = relevanceMap.entrySet().stream()
-                    .map(entry -> {
-                        SiteEntity siteEntity = pageToSiteMap.get(entry.getKey());
-                        return new SearchResult(
-                                siteEntity != null ? siteEntity.getUrl() : "",
-                                siteEntity != null ? siteEntity.getName() : "",
-                                entry.getKey().getPath(),
-                                getPageTitle(entry.getKey()),
-                                generateSnippet(entry.getKey(), queryWords),
-                                entry.getValue() / finalMaxRelevance);
-                    })
-                    .sorted(Comparator.comparingDouble(SearchResult::getRelevance).reversed())
-                    .collect(Collectors.toList());
-
-            searchStarting.set(false);
-            return new HashMap<>() {{
-                put("result", "true");
-                put("count", String.valueOf(results.size()));
-                put("data", results);
-            }};
         } catch (Exception e) {
-            System.out.println("Ошибка search: " + e.getMessage());
             return errorResponse(new Exception(e.getMessage()));
         } finally {
             searchStarting.set(false);
         }
+    }
+
+    private void validateSearch(String query) throws Exception {
+        if (searchStarting.get()) {
+            throw new Exception("Поиск уже запущен");
+        } else if (query.isEmpty()) {
+            throw new Exception("Задан пустой поисковый запрос");
+        }
+    }
+
+    private List<String> generateSitesList(String site) {
+        List<String> sitesList = new ArrayList<>();
+        if (site == null) {
+            sites.getSites().forEach(siteToSearch -> sitesList.add(siteToSearch.getUrl()));
+        } else {
+            sitesList.add(site);
+        }
+        return sitesList;
+    }
+
+    private SearchContext initializeSearchContext(String query, List<String> sitesList) {
+        Set<PageEntity> combinedRelevantPages = new HashSet<>();
+        List<LemmaEntity> combinedFilteredLemmas = new ArrayList<>();
+        List<String> queryWords = new ArrayList<>();
+        Map<PageEntity, SiteEntity> pageToSiteMap = new HashMap<>();
+
+        updateCombinedRelevantPages(sitesList, query, queryWords, combinedRelevantPages, combinedFilteredLemmas, pageToSiteMap);
+
+        return new SearchContext(combinedRelevantPages, combinedFilteredLemmas, queryWords, pageToSiteMap);
+    }
+
+    private void updateCombinedRelevantPages(List<String> sitesList, String query, List<String> queryWords,
+                                             Set<PageEntity> combinedRelevantPages,
+                                             List<LemmaEntity> combinedFilteredLemmas,
+                                             Map<PageEntity, SiteEntity> pageToSiteMap) {
+
+        for (String siteUrl : sitesList) {
+            SiteEntity siteEntity = siteRepository.findByUrl(siteUrl);
+
+            List<LemmaEntity> filteredLemmas = getFilteredLemmas(query, siteEntity);
+            combinedFilteredLemmas.addAll(filteredLemmas);
+
+            Set<PageEntity> relevantPages = getRelevantPages(filteredLemmas, queryWords);
+
+            if (relevantPages != null) {
+                combinedRelevantPages.addAll(relevantPages);
+                relevantPages.forEach(page -> pageToSiteMap.put(page, siteEntity));
+            }
+        }
+    }
+
+    private Map<String, Object> prepareSearchResult(SearchContext searchContext, int offset, int limit) {
+        Map<PageEntity, Double> relevanceMap =
+                calculateRelevance(searchContext.getCombinedRelevantPages(), searchContext.getCombinedFilteredLemmas());
+        double maxRelevance = relevanceMap.values().stream().max(Double::compareTo).orElse(0.0);
+
+        List<SearchResult> results = relevanceMap.entrySet().stream()
+                .map(entry -> createSearchResult(entry, searchContext.getQueryWords(),
+                        searchContext.getPageToSiteMap(), maxRelevance))
+                .sorted(Comparator.comparingDouble(SearchResult::getRelevance).reversed())
+                .collect(Collectors.toList());
+        int count = results.size();
+
+        List<SearchResult> newResults = results.subList(offset, Math.min(offset + limit, count));
+
+        return new HashMap<>() {{
+            put("result", "true");
+            put("count", String.valueOf(count));
+            put("data", count <= limit ? results : newResults);
+        }};
+    }
+
+    private Map<PageEntity, Double> calculateRelevance(Set<PageEntity> combinedRelevantPages,
+                                                       List<LemmaEntity> combinedFilteredLemmas) {
+        Map<PageEntity, Double> relevanceMap = new HashMap<>();
+
+        for (PageEntity page : combinedRelevantPages) {
+            double pageRelevance = combinedFilteredLemmas.stream()
+                    .mapToDouble(lemma -> {
+                        IndexEntity indexEntity = indexRepository.findByLemmaIdAndPageId(lemma, page);
+                        return indexEntity != null ? indexEntity.getRank() : 0.0;
+                    })
+                    .sum();
+            relevanceMap.put(page, pageRelevance);
+        }
+        return relevanceMap;
+    }
+
+    private SearchResult createSearchResult(Map.Entry<PageEntity, Double> entry, List<String> queryWords,
+                                            Map<PageEntity, SiteEntity> pageToSiteMap, double maxRelevance) {
+        SiteEntity siteEntity = pageToSiteMap.get(entry.getKey());
+        double normalizedRelevance = entry.getValue() / maxRelevance;
+        return new SearchResult(
+                siteEntity != null ? siteEntity.getUrl() : "",
+                siteEntity != null ? siteEntity.getName() : "",
+                entry.getKey().getPath(),
+                getPageTitle(entry.getKey()),
+                generateSnippet(entry.getKey(), queryWords),
+                normalizedRelevance
+        );
     }
 
     private List<LemmaEntity> getFilteredLemmas(String query, SiteEntity siteEntity) {
@@ -312,8 +346,7 @@ public class IndexingServiceImpl implements IndexingService {
         try {
             if (filteredLemmas.isEmpty()) return null;
             for (LemmaEntity lemma : filteredLemmas) {
-                String word = lemma.getLemma();
-                queryWords.add(word);
+                queryWords.add(lemma.getLemma());
             }
 
             Set<PageEntity> relevantPages =
@@ -342,43 +375,35 @@ public class IndexingServiceImpl implements IndexingService {
         String text = Jsoup.parse(page.getContent()).text();
         StringBuilder snippet = new StringBuilder();
         try {
-            int snippetLength = 200;
-
+            int snippetLength = SNIPPET_LENGTH;
             LuceneMorphology luceneMorph = new RussianLuceneMorphology();
-
             LemmaCreator lemmaCreator = new LemmaCreator();
 
-            String[] newWords = text.split("\\s+");
-            String regex = "[^а-я]";
-            boolean firstWordIsAppend = false;
+            String[] words = text.split("\\s+");
+            boolean isFirstWordAppended = false;
 
-            for (String newWord : newWords) {
-                String word = newWord;
-                String changedWord = word.toLowerCase().replaceAll(regex, "");
+            for (String word : words) {
+                String changedWord = word.toLowerCase().replaceAll("[^а-я]", "");
 
                 if (changedWord.isEmpty()) continue;
                 String lemma = lemmaCreator.takeLemmaFromWord(changedWord, luceneMorph);
                 if (queryWords.contains(lemma)) {
+                    if (snippet.isEmpty()) isFirstWordAppended = true;
                     word = "<b>".concat(word).concat("</b>");
-                    if (String.valueOf(snippet).isEmpty()) {
-                        snippet.append(word).append(" ");
-                        firstWordIsAppend = true;
-                        continue;
-                    }
                 }
-                int remainingLength = snippetLength - word.length();
-                if (firstWordIsAppend && (remainingLength) >= 0) {
+                if (isFirstWordAppended) {
+                    int remainingLength = snippetLength - word.length();
+                    if (remainingLength <= 0) break;
                     snippet.append(word).append(" ");
                     snippetLength = remainingLength;
                 }
-                if (remainingLength <= 0) break;
             }
-
         } catch (IOException e) {
             System.out.println("Ошибка snippet " + e.getMessage());
         }
         return String.valueOf(snippet);
     }
+
 
     private String getPageTitle(PageEntity page) {
         String title = "";

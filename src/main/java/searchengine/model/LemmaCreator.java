@@ -16,19 +16,14 @@ public class LemmaCreator {
 
             String[] words = takeWordsFromText(text);
 
-            String regex1 = "СОЮЗ";
-            String regex2 = "ПРЕДЛ";
-            String regex3 = "ЧАСТ";
-            String regex4 = "МЕЖД";
-
             for (String word : words) {
                 if (word.isEmpty()) continue;
                 List<String> wordMorphInfo = luceneMorph.getMorphInfo(word);
                 wordMorphInfo = wordMorphInfo.stream()
-                        .filter(w -> !w.contains(regex1) &&
-                                !w.contains(regex2) &&
-                                !w.contains(regex3) &&
-                                !w.contains(regex4))
+                        .filter(w -> !w.contains("СОЮЗ") &&
+                                !w.contains("ПРЕДЛ") &&
+                                !w.contains("ЧАСТ") &&
+                                !w.contains("МЕЖД"))
                         .toList();
 
                 if (!wordMorphInfo.isEmpty()) {
