@@ -69,7 +69,8 @@ public class PageIndexer extends RecursiveTask<Void> {
 
     public Document getDoc() {
         try {
-            Thread.sleep(150);
+            int delay = 500 + (int)(Math.random() * 4500);
+            Thread.sleep(delay);
             return Jsoup.connect(path)
                     .userAgent(userSettings.getUser())
                     .referrer(userSettings.getReferrer())

@@ -254,7 +254,8 @@ public class IndexingServiceImpl implements IndexingService {
         List<String> queryWords = new ArrayList<>();
         Map<PageEntity, SiteEntity> pageToSiteMap = new HashMap<>();
 
-        updateCombinedRelevantPages(sitesList, query, queryWords, combinedRelevantPages, combinedFilteredLemmas, pageToSiteMap);
+        updateCombinedRelevantPages(sitesList, query, queryWords,
+                combinedRelevantPages, combinedFilteredLemmas, pageToSiteMap);
 
         return new SearchContext(combinedRelevantPages, combinedFilteredLemmas, queryWords, pageToSiteMap);
     }
@@ -323,7 +324,7 @@ public class IndexingServiceImpl implements IndexingService {
         return new SearchResult(
                 siteEntity != null ? siteEntity.getUrl() : "",
                 siteEntity != null ? siteEntity.getName() : "",
-                entry.getKey().getPath(),
+                entry.getKey().getPath().replaceAll(siteEntity != null ? siteEntity.getUrl() : "", ""),
                 getPageTitle(entry.getKey()),
                 generateSnippet(entry.getKey(), queryWords),
                 normalizedRelevance
