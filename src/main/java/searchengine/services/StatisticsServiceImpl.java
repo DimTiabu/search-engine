@@ -49,38 +49,8 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<Site> sitesList = sites.getSites();
 
-        for (int i = 0; i < sitesList.size(); i++) {
-            DetailedStatisticsItem item = new DetailedStatisticsItem();
-            Site site = sitesList.get(i);
-            item.setName(site.getName());
-            item.setUrl(site.getUrl());
-            SiteEntity siteEntity;
-            if (siteRepository.findByUrl(site.getUrl()) == null) {
-                item.setPages(0);
-                item.setLemmas(0);
-                item.setStatus(null);
-                item.setError(null);
-                item.setStatusTime(0);
-            } else {
-                siteEntity = siteRepository.findByUrl(site.getUrl());
-                List<PageEntity> pageEntityList = pageRepository.findBySite(siteEntity);
-                int pages = pageEntityList.size();
-                item.setPages(pages);
-                List<LemmaEntity> lemmaEntityList = lemmaRepository.findBySite(siteEntity);
-                int lemmas = lemmaEntityList.size();
-                item.setLemmas(lemmas);
-                item.setStatus(siteEntity.getStatus().toString());
-                item.setError(siteEntity.getLastError());
-                LocalDateTime localDateTime = siteEntity.getStatusTime();
-                ZoneId zoneId = ZoneId.systemDefault();
-                Instant instant = localDateTime.atZone(zoneId).toInstant();
-                long millis = instant.toEpochMilli();
-                long seconds = instant.getEpochSecond();
-                item.setStatusTime(millis);
-                total.setPages(total.getPages() + pages);
-                total.setLemmas(total.getLemmas() + lemmas);
-            }
-            detailed.add(item);
+        for (Site site : sitesList) {
+            detailed.add(createItem(site, total));
         }
 
         StatisticsResponse response = new StatisticsResponse();
@@ -90,5 +60,37 @@ public class StatisticsServiceImpl implements StatisticsService {
         response.setStatistics(data);
         response.setResult(true);
         return response;
+    }
+
+    private DetailedStatisticsItem createItem(Site site, TotalStatistics total) {
+        DetailedStatisticsItem item = new DetailedStatisticsItem();
+        item.setName(site.getName());
+        item.setUrl(site.getUrl());
+        SiteEntity siteEntity;
+        if (siteRepository.findByUrl(site.getUrl()) == null) {
+            item.setPages(0);
+            item.setLemmas(0);
+            item.setStatus(null);
+            item.setError(null);
+            item.setStatusTime(0);
+        } else {
+            siteEntity = siteRepository.findByUrl(site.getUrl());
+            List<PageEntity> pageEntityList = pageRepository.findBySite(siteEntity);
+            int pages = pageEntityList.size();
+            item.setPages(pages);
+            List<LemmaEntity> lemmaEntityList = lemmaRepository.findBySite(siteEntity);
+            int lemmas = lemmaEntityList.size();
+            item.setLemmas(lemmas);
+            item.setStatus(siteEntity.getStatus().toString());
+            item.setError(siteEntity.getLastError());
+            LocalDateTime localDateTime = siteEntity.getStatusTime();
+            ZoneId zoneId = ZoneId.systemDefault();
+            Instant instant = localDateTime.atZone(zoneId).toInstant();
+            long millis = instant.toEpochMilli();
+            item.setStatusTime(millis);
+            total.setPages(total.getPages() + pages);
+            total.setLemmas(total.getLemmas() + lemmas);
+        }
+        return item;
     }
 }
