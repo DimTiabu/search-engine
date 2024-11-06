@@ -35,10 +35,14 @@ public class PageIndexer extends RecursiveTask<Void> {
     @Override
     protected Void compute() {
         try {
-            if (!running.get()) return null;
+            if (!running.get()) {
+                return null;
+            }
 
             Document doc = getDoc();
-            if (doc == null) return null;
+            if (doc == null) {
+                return null;
+            }
 
             createPageWithLemmasAndIndices(doc);
 
@@ -86,9 +90,9 @@ public class PageIndexer extends RecursiveTask<Void> {
     public void createPageWithLemmasAndIndices(Document doc) {
         updateStatusTime();
         PageEntity page = createPage(doc);
-        if (page != null
-                && page.getCode() < 400)
+        if (page != null && page.getCode() < 400) {
             createLemmasAndIndices(page);
+        }
     }
 
     @Transactional

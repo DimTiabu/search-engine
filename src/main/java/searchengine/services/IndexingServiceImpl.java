@@ -54,7 +54,9 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public Map<String, Object> startIndexing() {
-        if (indexingStarting.get()) return errorResponse(new Exception("Индексация уже запущена"));
+        if (indexingStarting.get()) {
+            return errorResponse(new Exception("Индексация уже запущена"));
+        }
 
         indexingStarting.set(true);
         new Thread(this::indexingTask).start();
@@ -125,7 +127,9 @@ public class IndexingServiceImpl implements IndexingService {
                 int lemmaId = indexEntity.getLemma().getId();
                 LemmaEntity lemmaEntity =
                         lemmaRepository.findById(lemmaId).orElse(null);
-                if (lemmaEntity == null) continue;
+                if (lemmaEntity == null) {
+                    continue;
+                }
                 int frequency = lemmaEntity.getFrequency();
                 if (frequency == 1) {
                     lemmaRepository.deleteById(lemmaId);
@@ -156,7 +160,9 @@ public class IndexingServiceImpl implements IndexingService {
     @Transactional
     public Map<String, Object> stopIndexing() {
         try {
-            if (!indexingStarting.get()) throw new Exception("Индексация не запущена");
+            if (!indexingStarting.get()) {
+                throw new Exception("Индексация не запущена");
+            }
             siteRepository.findByStatus(SiteStatus.INDEXING)
                     .forEach(site -> {
                         site.setStatus(SiteStatus.FAILED);
@@ -173,12 +179,16 @@ public class IndexingServiceImpl implements IndexingService {
     @Transactional
     public Map<String, Object> indexPage(String url) {
         try {
-            if (indexingStarting.get()) throw new Exception("Индексация уже запущена");
+            if (indexingStarting.get()) {
+                throw new Exception("Индексация уже запущена");
+            }
 
             indexingStarting.set(true);
 
             PageEntity page = pageRepository.findByPath(url);
-            if (page != null) deletePage(page);
+            if (page != null) {
+                deletePage(page);
+            }
 
             List<Site> sitesList = sites.getSites();
             SiteEntity siteEntity = null;
@@ -187,7 +197,9 @@ public class IndexingServiceImpl implements IndexingService {
                 String siteUrl = site.getUrl();
                 if (url.contains(siteUrl)) {
                     siteEntity = siteRepository.findByUrl(siteUrl);
-                    if (siteEntity == null) siteEntity = createSiteEntity(site);
+                    if (siteEntity == null) {
+                        siteEntity = createSiteEntity(site);
+                    }
                     PageIndexer pageIndexer = new PageIndexer(siteEntity, url, siteRepository, pageRepository,
                             lemmaRepository, indexRepository, userSettings, indexingStarting);
                     Document doc = pageIndexer.getDoc();
@@ -196,8 +208,10 @@ public class IndexingServiceImpl implements IndexingService {
             }
             indexingStarting.set(false);
 
-            if (siteEntity == null) throw new Exception("Данная страница находится " +
-                    "за пределами сайтов, указанных в конфигурационном файле");
+            if (siteEntity == null) {
+                throw new Exception("Данная страница находится " +
+                        "за пределами сайтов, указанных в конфигурационном файле");
+            }
             return okResponse();
         } catch (Exception e) {
             return errorResponse(e);
@@ -214,8 +228,9 @@ public class IndexingServiceImpl implements IndexingService {
 
             SearchContext searchContext = initializeSearchContext(query, sitesList);
 
-            if (searchContext.getCombinedFilteredLemmas().isEmpty())
+            if (searchContext.getCombinedFilteredLemmas().isEmpty()) {
                 throw new Exception("Не найдено подходящих лемм для данного запроса");
+            }
 
             if (searchContext.getCombinedRelevantPages().isEmpty()) {
                 return Collections.emptyMap();
@@ -345,7 +360,9 @@ public class IndexingServiceImpl implements IndexingService {
 
     private Set<PageEntity> getRelevantPages(List<LemmaEntity> filteredLemmas, List<String> queryWords) {
         try {
-            if (filteredLemmas.isEmpty()) return null;
+            if (filteredLemmas.isEmpty()) {
+                return null;
+            }
             for (LemmaEntity lemma : filteredLemmas) {
                 queryWords.add(lemma.getLemma());
             }
@@ -386,15 +403,21 @@ public class IndexingServiceImpl implements IndexingService {
             for (String word : words) {
                 String changedWord = word.toLowerCase().replaceAll("[^а-я]", "");
 
-                if (changedWord.isEmpty()) continue;
+                if (changedWord.isEmpty()) {
+                    continue;
+                }
                 String lemma = lemmaCreator.takeLemmaFromWord(changedWord, luceneMorph);
                 if (queryWords.contains(lemma)) {
-                    if (snippet.isEmpty()) isFirstWordAppended = true;
+                    if (snippet.isEmpty()) {
+                        isFirstWordAppended = true;
+                    }
                     word = "<b>".concat(word).concat("</b>");
                 }
                 if (isFirstWordAppended) {
                     int remainingLength = snippetLength - word.length();
-                    if (remainingLength <= 0) break;
+                    if (remainingLength <= 0) {
+                        break;
+                    }
                     snippet.append(word).append(" ");
                     snippetLength = remainingLength;
                 }
