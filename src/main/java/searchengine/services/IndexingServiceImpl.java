@@ -4,7 +4,6 @@ import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +31,14 @@ public class IndexingServiceImpl implements IndexingService {
 
     private final SitesList sites;
     private final UserSettings userSettings;
-    private final SiteRepository siteRepository;
-    private final PageRepository pageRepository;
-    private final LemmaRepository lemmaRepository;
-    private final IndexRepository indexRepository;
+    private volatile SiteRepository siteRepository;
+    private volatile PageRepository pageRepository;
+    private volatile LemmaRepository lemmaRepository;
+    private volatile IndexRepository indexRepository;
+    private LuceneMorphology luceneMorph = new RussianLuceneMorphology();
+    private LemmaCreator lemmaCreator = new LemmaCreator(luceneMorph);
+
+
     private final AtomicBoolean indexingStarting = new AtomicBoolean(false);
     private final AtomicBoolean searchStarting = new AtomicBoolean(false);
     private static final int SNIPPET_LENGTH = 200;
@@ -43,7 +46,7 @@ public class IndexingServiceImpl implements IndexingService {
     @Autowired
     public IndexingServiceImpl(SitesList sites, UserSettings userSettings,
                                SiteRepository siteRepository, PageRepository pageRepository,
-                               LemmaRepository lemmaRepository, IndexRepository indexRepository) {
+                               LemmaRepository lemmaRepository, IndexRepository indexRepository) throws IOException {
         this.sites = sites;
         this.userSettings = userSettings;
         this.siteRepository = siteRepository;
@@ -73,18 +76,16 @@ public class IndexingServiceImpl implements IndexingService {
             for (Site site : sitesList) {
                 SiteEntity siteEntity;
                 String url = site.getUrl();
-                synchronized (siteRepository) {
-                    siteEntity = updateSite(site, url, siteEntityList);
-                }
+                siteEntity = updateSite(site, url, siteEntityList);
                 forkJoinPool.submit(
                         new PageIndexer(siteEntity, url, siteRepository, pageRepository,
-                                lemmaRepository, indexRepository, userSettings, indexingStarting));
+                                lemmaRepository, indexRepository, userSettings, indexingStarting, lemmaCreator));
             }
             forkJoinPool.shutdown();
             forkJoinPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 
             for (SiteEntity siteEntity : siteEntityList) {
-                if (indexingStarting.get()) synchronized (siteRepository) {
+                if (indexingStarting.get()) {
                     siteEntity.setStatus(SiteStatus.INDEXED);
                     siteRepository.save(siteEntity);
                 }
@@ -107,7 +108,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Transactional
-    public synchronized void deleteSite(SiteEntity siteEntity) {
+    public void deleteSite(SiteEntity siteEntity) {
         List<PageEntity> pageEntityList
                 = pageRepository.findBySite(siteEntity);
         for (PageEntity page : pageEntityList) {
@@ -201,7 +202,7 @@ public class IndexingServiceImpl implements IndexingService {
                         siteEntity = createSiteEntity(site);
                     }
                     PageIndexer pageIndexer = new PageIndexer(siteEntity, url, siteRepository, pageRepository,
-                            lemmaRepository, indexRepository, userSettings, indexingStarting);
+                            lemmaRepository, indexRepository, userSettings, indexingStarting, lemmaCreator);
                     Document doc = pageIndexer.getDoc();
                     pageIndexer.createPageWithLemmasAndIndices(doc);
                 }
@@ -301,6 +302,7 @@ public class IndexingServiceImpl implements IndexingService {
         double maxRelevance = relevanceMap.values().stream().max(Double::compareTo).orElse(0.0);
 
         List<SearchResult> results = relevanceMap.entrySet().stream()
+                .parallel()
                 .map(entry -> createSearchResult(entry, searchContext.getQueryWords(),
                         searchContext.getPageToSiteMap(), maxRelevance))
                 .sorted(Comparator.comparingDouble(SearchResult::getRelevance).reversed())
@@ -340,7 +342,7 @@ public class IndexingServiceImpl implements IndexingService {
                 siteEntity != null ? siteEntity.getUrl() : "",
                 siteEntity != null ? siteEntity.getName() : "",
                 entry.getKey().getPath().replaceAll(siteEntity != null ? siteEntity.getUrl() : "", ""),
-                getPageTitle(entry.getKey()),
+                entry.getKey().getTitle(),
                 generateSnippet(entry.getKey(), queryWords),
                 normalizedRelevance
         );
@@ -348,10 +350,10 @@ public class IndexingServiceImpl implements IndexingService {
 
     private List<LemmaEntity> getFilteredLemmas(String query, SiteEntity siteEntity) {
 
-        LemmaCreator lemmaCreator = new LemmaCreator();
         Map<String, Integer> words = lemmaCreator.getLemmas(query);
 
         return words.keySet().stream()
+                .parallel()
                 .map(lemma -> lemmaRepository.findByLemmaAndSiteId(lemma, siteEntity))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(LemmaEntity::getFrequency))
@@ -392,57 +394,36 @@ public class IndexingServiceImpl implements IndexingService {
     private String generateSnippet(PageEntity page, List<String> queryWords) {
         String text = Jsoup.parse(page.getContent()).text();
         StringBuilder snippet = new StringBuilder();
-        try {
-            int snippetLength = SNIPPET_LENGTH;
-            LuceneMorphology luceneMorph = new RussianLuceneMorphology();
-            LemmaCreator lemmaCreator = new LemmaCreator();
+        int snippetLength = SNIPPET_LENGTH;
 
-            String[] words = text.split("\\s+");
-            boolean isFirstWordAppended = false;
+        String[] words = text.split("\\s+");
+        boolean isFirstWordAppended = false;
 
-            for (String word : words) {
-                String changedWord = word.toLowerCase().replaceAll("[^а-я]", "");
+        String regex = "[^а-я]";
 
-                if (changedWord.isEmpty()) {
-                    continue;
-                }
-                String lemma = lemmaCreator.takeLemmaFromWord(changedWord, luceneMorph);
-                if (queryWords.contains(lemma)) {
-                    if (snippet.isEmpty()) {
-                        isFirstWordAppended = true;
-                    }
-                    word = "<b>".concat(word).concat("</b>");
-                }
-                if (isFirstWordAppended) {
-                    int remainingLength = snippetLength - word.length();
-                    if (remainingLength <= 0) {
-                        break;
-                    }
-                    snippet.append(word).append(" ");
-                    snippetLength = remainingLength;
-                }
+        for (String word : words) {
+            String changedWord = word.toLowerCase().replaceAll(regex, "");
+
+            if (changedWord.isEmpty()) {
+                continue;
             }
-        } catch (IOException e) {
-            System.out.println("Ошибка snippet " + e.getMessage());
+            String lemma = lemmaCreator.takeLemmaFromWord(changedWord);
+            if (queryWords.contains(lemma)) {
+                if (snippet.isEmpty()) {
+                    isFirstWordAppended = true;
+                }
+                word = "<b>".concat(word).concat("</b>");
+            }
+            if (isFirstWordAppended) {
+                int remainingLength = snippetLength - word.length();
+                if (remainingLength <= 0) {
+                    break;
+                }
+                snippet.append(word).append(" ");
+                snippetLength = remainingLength;
+            }
         }
         return String.valueOf(snippet);
-    }
-
-
-    private String getPageTitle(PageEntity page) {
-        String title = "";
-        try {
-            Thread.sleep(150);
-            Document doc = Jsoup.connect(page.getPath())
-                    .userAgent(userSettings.getUser())
-                    .referrer(userSettings.getReferrer())
-                    .get();
-            Element element = doc.select("title").first();
-            title = element.text();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return title;
     }
 
     public Map<String, Object> okResponse() {

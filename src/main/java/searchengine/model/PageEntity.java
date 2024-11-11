@@ -26,4 +26,7 @@ public class PageEntity {
     @ToString.Exclude
     @Column(name = "content", nullable = false, columnDefinition = "MEDIUMTEXT")
     private String content;
+
+    @ToString.Exclude
+    private String title;
 }

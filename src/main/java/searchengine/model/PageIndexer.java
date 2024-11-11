@@ -1,6 +1,8 @@
 package searchengine.model;
 
 import lombok.RequiredArgsConstructor;
+import org.apache.lucene.morphology.LuceneMorphology;
+import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -30,6 +32,8 @@ public class PageIndexer extends RecursiveTask<Void> {
     private final IndexRepository indexRepository;
     private final UserSettings userSettings;
     private final AtomicBoolean running;
+    private final LemmaCreator lemmaCreator;
+
     private final List<PageIndexer> tasks = new ArrayList<>();
 
     @Override
@@ -50,14 +54,13 @@ public class PageIndexer extends RecursiveTask<Void> {
 
             for (Element link : links) {
                 String url = link.absUrl("href");
-                PageEntity page;
-                page = pageRepository.findByPath(url);
+                PageEntity page = pageRepository.findByPath(url);
                 if (!url.equals(path) &&
                         url.contains(path) &&
                         !url.contains("#") &&
                         page == null) {
                     PageIndexer task = new PageIndexer(site, url, siteRepository, pageRepository,
-                            lemmaRepository, indexRepository, userSettings, running);
+                            lemmaRepository, indexRepository, userSettings, running, lemmaCreator);
                     task.fork();
                     tasks.add(task);
                 }
@@ -73,7 +76,7 @@ public class PageIndexer extends RecursiveTask<Void> {
 
     public Document getDoc() {
         try {
-            int delay = 500 + (int)(Math.random() * 4500);
+            int delay = 500 + (int) (Math.random() * 4500);
             Thread.sleep(delay);
             return Jsoup.connect(path)
                     .userAgent(userSettings.getUser())
@@ -111,11 +114,10 @@ public class PageIndexer extends RecursiveTask<Void> {
             page.setPath(path);
             page.setContent(doc.html());
             page.setCode(doc.connection().response().statusCode());
-            synchronized (pageRepository) {
-                if (pageRepository.findByPath(path) == null) {
-                    pageRepository.save(page);
-                    return page;
-                }
+            page.setTitle(doc.title());
+            if (pageRepository.findByPath(path) == null) {
+                pageRepository.save(page);
+                return page;
             }
         } catch (Exception e) {
             System.out.println("Ошибка createPage: " + e.getMessage() + " для страницы " + path);
@@ -128,26 +130,22 @@ public class PageIndexer extends RecursiveTask<Void> {
     public void createLemmasAndIndices(PageEntity page) {
         try {
             SiteEntity site = page.getSite();
-            LemmaCreator lemmaCreator = new LemmaCreator();
             Map<String, Integer> lemmas = lemmaCreator.getLemmas(page.getContent());
             List<IndexEntity> indicesToSave = new ArrayList<>();
 
             for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
                 String lemmaText = entry.getKey();
                 float count = entry.getValue();
-                LemmaEntity lemma;
-                synchronized (lemmaRepository) {
-                    lemma = lemmaRepository.findByLemmaAndSiteId(lemmaText, site);
-                    if (lemma == null) {
-                        lemma = new LemmaEntity();
-                        lemma.setSite(site);
-                        lemma.setLemma(lemmaText);
-                        lemma.setFrequency(1);
-                    } else {
-                        lemma.setFrequency(lemma.getFrequency() + 1);
-                    }
-                    lemmaRepository.save(lemma);
+                LemmaEntity lemma = lemmaRepository.findByLemmaAndSiteId(lemmaText, site);
+                if (lemma == null) {
+                    lemma = new LemmaEntity();
+                    lemma.setSite(site);
+                    lemma.setLemma(lemmaText);
+                    lemma.setFrequency(1);
+                } else {
+                    lemma.setFrequency(lemma.getFrequency() + 1);
                 }
+                lemmaRepository.save(lemma);
                 findOrCreateIndex(lemma, page, count, indicesToSave);
             }
             indexRepository.saveAll(indicesToSave);
@@ -159,8 +157,7 @@ public class PageIndexer extends RecursiveTask<Void> {
 
     private void findOrCreateIndex(LemmaEntity lemma, PageEntity page,
                                    float count, List<IndexEntity> indicesToSave) {
-        IndexEntity index;
-        index = indexRepository.findByLemmaIdAndPageId(lemma, page);
+        IndexEntity index = indexRepository.findByLemmaIdAndPageId(lemma, page);
         if (index == null) {
             index = new IndexEntity();
             index.setPage(page);

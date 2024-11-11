@@ -26,18 +26,10 @@ import java.util.Random;
 @RequiredArgsConstructor
 public class StatisticsServiceImpl implements StatisticsService {
 
-    private final Random random = new Random();
     private final SitesList sites;
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
-
-    String[] statuses = {"INDEXED", "FAILED", "INDEXING"};
-    String[] errors = {
-            "Ошибка индексации: главная страница сайта не доступна",
-            "Ошибка индексации: сайт не доступен",
-            ""
-    };
 
     @Override
     public StatisticsResponse getStatistics() {
@@ -46,13 +38,11 @@ public class StatisticsServiceImpl implements StatisticsService {
         total.setSites(sites.getSites().size());
         total.setIndexing(true);
 
-        List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<Site> sitesList = sites.getSites();
 
-        for (Site site : sitesList) {
-            detailed.add(createItem(site, total));
-        }
-
+        List<DetailedStatisticsItem> detailed = sitesList.stream()
+                .map(site -> createItem(site, total))
+                .toList();
         StatisticsResponse response = new StatisticsResponse();
         StatisticsData data = new StatisticsData();
         data.setTotal(total);
@@ -78,16 +68,21 @@ public class StatisticsServiceImpl implements StatisticsService {
             List<PageEntity> pageEntityList = pageRepository.findBySite(siteEntity);
             int pages = pageEntityList.size();
             item.setPages(pages);
+
             List<LemmaEntity> lemmaEntityList = lemmaRepository.findBySite(siteEntity);
             int lemmas = lemmaEntityList.size();
             item.setLemmas(lemmas);
+
             item.setStatus(siteEntity.getStatus().toString());
             item.setError(siteEntity.getLastError());
+
             LocalDateTime localDateTime = siteEntity.getStatusTime();
             ZoneId zoneId = ZoneId.systemDefault();
             Instant instant = localDateTime.atZone(zoneId).toInstant();
+
             long millis = instant.toEpochMilli();
             item.setStatusTime(millis);
+
             total.setPages(total.getPages() + pages);
             total.setLemmas(total.getLemmas() + lemmas);
         }

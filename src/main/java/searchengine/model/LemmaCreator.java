@@ -4,39 +4,46 @@ import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class LemmaCreator {
+    private LuceneMorphology luceneMorph;
+
+    public LemmaCreator(LuceneMorphology luceneMorph) {
+        this.luceneMorph = luceneMorph;
+    }
+
     public Map<String, Integer> getLemmas(String text) {
-        Map<String, Integer> lemmas = new HashMap<>();
-        try {
-            LuceneMorphology luceneMorph = new RussianLuceneMorphology();
+        Map<String, Integer> lemmas = new ConcurrentHashMap<>();
+        Map<String, String> wordCache = new ConcurrentHashMap<>();
 
-            String[] words = takeWordsFromText(text);
-
-            for (String word : words) {
-                if (word.isEmpty()) continue;
-                List<String> wordMorphInfo = luceneMorph.getMorphInfo(word);
-                wordMorphInfo = wordMorphInfo.stream()
-                        .filter(w -> !w.contains("СОЮЗ") &&
-                                !w.contains("ПРЕДЛ") &&
-                                !w.contains("ЧАСТ") &&
-                                !w.contains("МЕЖД"))
-                        .toList();
-
-                if (!wordMorphInfo.isEmpty()) {
-                    String lemma = takeLemmaFromWord(word, luceneMorph);
-                    if (lemma != null) {
-                        int wordCount = lemmas.containsKey(lemma) ? lemmas.get(lemma) + 1 : 1;
-                        lemmas.put(lemma, wordCount);
+        Arrays.stream(takeWordsFromText(text))
+                .parallel()
+                .forEach(word -> {
+                    if (word.isEmpty() || wordCache.containsKey(word)) {
+                        return;
                     }
-                }
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+                    List<String> wordMorphInfo = luceneMorph.getMorphInfo(word)
+                            .stream()
+                            .filter(w -> !w.contains("СОЮЗ") &&
+                                    !w.contains("ПРЕДЛ") &&
+                                    !w.contains("ЧАСТ") &&
+                                    !w.contains("МЕЖД"))
+                            .toList();
+
+                    if (!wordMorphInfo.isEmpty()) {
+                        wordMorphInfo
+                                .forEach(w -> {
+                                    String lemma = takeLemmaFromWord(word);
+                                    if (lemma != null) {
+                                        lemmas.merge(lemma, 1, Integer::sum);
+                                        wordCache.put(word, lemma);
+                                    }
+                                });
+                    }
+                });
+
         return lemmas;
     }
 
@@ -49,12 +56,8 @@ public class LemmaCreator {
     }
 
 
-    public String takeLemmaFromWord(String word,
-                                    LuceneMorphology luceneMorph) {
+    public String takeLemmaFromWord(String word) {
         List<String> wordBaseForms = luceneMorph.getNormalForms(word);
-        if (!wordBaseForms.isEmpty()) {
-            return wordBaseForms.get(0);
-        }
-        return null;
+        return !wordBaseForms.isEmpty() ? wordBaseForms.get(0) : null;
     }
 }
