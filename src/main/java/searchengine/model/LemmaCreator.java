@@ -1,14 +1,12 @@
 package searchengine.model;
 
 import org.apache.lucene.morphology.LuceneMorphology;
-import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class LemmaCreator {
-    private LuceneMorphology luceneMorph;
+    private final LuceneMorphology luceneMorph;
 
     public LemmaCreator(LuceneMorphology luceneMorph) {
         this.luceneMorph = luceneMorph;
