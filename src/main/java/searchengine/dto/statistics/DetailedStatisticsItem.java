@@ -1,8 +1,14 @@
 package searchengine.dto.statistics;
 
-import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class DetailedStatisticsItem {
     private String url;
     private String name;

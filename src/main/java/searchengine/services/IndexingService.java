@@ -1,8 +1,5 @@
 package searchengine.services;
 
-import searchengine.config.Site;
-import searchengine.model.SiteEntity;
-
 import java.util.Map;
 
 public interface IndexingService {

@@ -1,9 +1,12 @@
 package searchengine.dto.indexing;
 
-import lombok.Data;
-import searchengine.config.Site;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
+@AllArgsConstructor
 public class SearchResult {
     private final String site;
     private final String siteName;

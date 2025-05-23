@@ -1,12 +1,14 @@
 package searchengine.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.ToString;
+import lombok.*;
 
 @Entity
 @Table(name = "page", indexes = @Index(name = "idx_page_path", columnList = "path"))
-@Data
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class PageEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
