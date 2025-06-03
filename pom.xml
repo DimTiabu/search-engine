@@ -20,13 +20,6 @@
         <relativePath/>
     </parent>
 
-    <repositories>
-        <repository>
-            <id>skillbox-gitlab</id>
-            <url>https://gitlab.skillbox.ru/api/v4/projects/263574/packages/maven</url>
-        </repository>
-    </repositories>
-
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -81,6 +74,5 @@
             <artifactId>russian</artifactId>
             <version>1.5</version>
         </dependency>
-
     </dependencies>
 </project>

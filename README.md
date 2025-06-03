@@ -30,10 +30,8 @@
 
 1. *Клонирование репозитория:*
 
-sh
-
-```
-git clone https://github.com/DimTiabu/searchEngine.git
+```sh
+  git clone https://github.com/DimTiabu/searchEngine.git
 ```
 
 2. *Установка списка сайтов для индексации в файле [application.yaml](application.yaml).* Например:
@@ -58,26 +56,22 @@ spring:
 ```
 4. *Переход в директорию репозитория:*
 
-sh
-
-```
-cd searchEngine
+```sh
+  cd searchEngine
 ```
 
 5. *Сборка проекта:*
 
-sh
-
-```
-mvn clean install
+```sh
+  mvn clean install
 ```
 
 6. *Запуск приложения:*
 
 sh
 
-```
-mvn spring-boot:run
+```sh
+  mvn spring-boot:run
 ```
 
 7. *Создание БД search_engine_db (если она еще не существует) в MySQL:*
