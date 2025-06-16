@@ -13,7 +13,6 @@ import ru.tyabutov.searchengine.config.UserSettings;
 import ru.tyabutov.searchengine.dto.indexing.SearchContext;
 import ru.tyabutov.searchengine.model.*;
 import ru.tyabutov.searchengine.dto.indexing.SearchResult;
-import ru.tyabutov.searchengine.model.*;
 import ru.tyabutov.searchengine.repositories.IndexRepository;
 import ru.tyabutov.searchengine.repositories.LemmaRepository;
 import ru.tyabutov.searchengine.repositories.PageRepository;

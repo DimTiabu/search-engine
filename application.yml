@@ -7,8 +7,8 @@ user-settings:
 
 spring:
   datasource:
-    username: root
-    password: testtest
+    username: testUsername
+    password: testPassword
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
   jpa:
     properties:
